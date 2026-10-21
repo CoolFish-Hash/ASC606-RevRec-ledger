@@ -1,0 +1,914 @@
+<title>Rev Rec Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;500;600;700&family=Spline+Sans+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* Layout: sticky top bar with three tabs; Contracts = list left + editor right; Report = chart, bridge, drillable matrix. */
+:root{
+  --bg:#F1F4F2;--surface:#FFFFFF;--ink:#14231E;--ink2:#47574F;--muted:#6F7F78;--rule:#D3DCD8;--soft:#E3ECE8;
+  --accent:#0B5D4B;--on-accent:#FFFFFF;
+  --license:#2A78D6;--support:#EB6834;--usage:#6250D6;--bill:#1BAF7A;--total:#56675F;
+  --warn:#A8530F;--warn-bg:#FBEBDD;--bad:#B3261E;--ok:#1A7F4B;
+  --font:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"Spline Sans Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0D1613;--surface:#14211D;--ink:#E6EFEB;--ink2:#B4C4BD;--muted:#8A9B94;--rule:#294038;--soft:#1B2D27;
+  --accent:#4FC9A6;--on-accent:#06201A;
+  --license:#3987E5;--support:#D95926;--usage:#9085E9;--bill:#199E70;--total:#9CB0A8;
+  --warn:#F0B27A;--warn-bg:#35261A;--bad:#FF8A80;--ok:#6FD39A;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0D1613;--surface:#14211D;--ink:#E6EFEB;--ink2:#B4C4BD;--muted:#8A9B94;--rule:#294038;--soft:#1B2D27;
+  --accent:#4FC9A6;--on-accent:#06201A;
+  --license:#3987E5;--support:#D95926;--usage:#9085E9;--bill:#199E70;--total:#9CB0A8;
+  --warn:#F0B27A;--warn-bg:#35261A;--bad:#FF8A80;--ok:#6FD39A;color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:15px;line-height:1.5;padding-inline:clamp(16px,3vw,32px);padding-block:0 48px;min-height:100vh}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:4px}
+h1,h2,h3{margin:0;font-weight:600;text-wrap:balance;line-height:1.2}
+h1{font-size:22px;letter-spacing:-.01em}h2{font-size:18px}h3{font-size:15px}
+.num{font-variant-numeric:tabular-nums}
+.mono{font-family:var(--mono);font-size:12.5px}
+.muted{color:var(--muted)}.sm{font-size:13px}
+/* top bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;padding-block:14px;border-bottom:1px solid var(--rule);margin-inline:calc(-1*clamp(16px,3vw,32px));padding-inline:clamp(16px,3vw,32px)}
+.brand p{margin:0;color:var(--muted);font-size:13px}
+.tabs{display:flex;gap:4px;margin-left:auto;flex-wrap:wrap}
+.tab{border:0;background:transparent;padding:8px 14px;border-radius:6px;cursor:pointer;color:var(--ink2);font-weight:500}
+.tab[aria-selected="true"]{background:var(--accent);color:var(--on-accent)}
+.tab:not([aria-selected="true"]):hover{background:var(--soft)}
+.ghost{border:1px solid var(--rule);background:transparent;border-radius:6px;padding:7px 12px;cursor:pointer;color:var(--ink2)}
+.ghost:hover{background:var(--soft)}
+.primary{border:1px solid var(--accent);background:var(--accent);color:var(--on-accent);border-radius:6px;padding:8px 14px;cursor:pointer;font-weight:600}
+.danger{border:1px solid var(--bad);background:transparent;color:var(--bad);border-radius:6px;padding:7px 12px;cursor:pointer}
+main{padding-top:20px}
+/* contracts */
+.split{display:grid;grid-template-columns:minmax(260px,330px) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:900px){.split{grid-template-columns:minmax(0,1fr)}}
+.side{display:flex;flex-direction:column;gap:10px;min-width:0}
+.side-tools{display:flex;gap:8px}
+.side-tools input{flex:1;min-width:0}
+#list{display:flex;flex-direction:column;border:1px solid var(--rule);border-radius:8px;background:var(--surface);max-height:70vh;overflow:auto}
+@media (max-width:900px){#list{max-height:260px}}
+.citem{display:grid;gap:2px;text-align:left;border:0;border-bottom:1px solid var(--rule);background:transparent;padding:10px 12px;cursor:pointer}
+.citem:last-child{border-bottom:0}
+.citem:hover{background:var(--soft)}
+.citem[aria-current="true"]{background:var(--soft);box-shadow:inset 3px 0 0 var(--accent)}
+.citem .r1{display:flex;justify-content:space-between;gap:8px;font-weight:600}
+.citem .r2{font-size:12.5px;color:var(--muted);display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.pill{display:inline-block;padding:0 8px;border-radius:99px;font-size:12px;font-weight:600;background:var(--soft);color:var(--ink2)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.editor{display:flex;flex-direction:column;gap:22px;min-width:0}
+.ehead{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.ehead .acts{display:flex;gap:8px;flex-wrap:wrap}
+.summary{display:flex;flex-wrap:wrap;gap:8px 28px;padding:14px 16px;background:var(--surface);border:1px solid var(--rule);border-radius:8px}
+.summary div{display:flex;flex-direction:column;min-width:0}
+.summary b{font-size:19px;font-weight:600}
+.summary span{font-size:12.5px;color:var(--muted)}
+.switch{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500}
+.switch input{width:18px;height:18px;accent-color:var(--accent)}
+.tablewrap{overflow-x:auto;border:1px solid var(--rule);border-radius:8px;background:var(--surface);max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 12px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap;font-variant-numeric:tabular-nums}
+th{font-weight:600;color:var(--ink2);background:var(--soft)}
+th:first-child,td:first-child{text-align:left}
+tr:last-child td{border-bottom:0}
+tfoot td{font-weight:600;background:var(--soft)}
+td.wrap{white-space:normal;text-align:left;min-width:220px;color:var(--ink2)}
+.calc h3{margin-bottom:8px}
+.calc{display:flex;flex-direction:column;gap:18px}
+.steps td:first-child{font-family:var(--mono);font-size:12.5px;color:var(--muted);width:1%}
+.steps td:nth-child(2){text-align:left;font-weight:500}
+.cscroll.b svg{min-width:400px}
+.issues{padding:10px 14px;border-radius:8px;background:var(--warn-bg);color:var(--warn);margin:0;list-style:none;display:flex;flex-direction:column;gap:2px}
+.form{display:flex;flex-direction:column;gap:22px}
+.sec{display:flex;flex-direction:column;gap:12px;border-top:1px solid var(--rule);padding-top:16px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px 16px}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld>span{font-size:13px;color:var(--ink2);font-weight:500}
+.fld small{color:var(--muted);font-size:12px}
+input[type=text],input[type=date],input[type=month],input[type=number],select,textarea{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:7px 9px;width:100%;min-width:0}
+input[readonly]{background:var(--soft)}
+.flags{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px 20px}
+.flag{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13.5px}
+.flag select{width:84px;flex:none}
+/* report */
+.ctl{display:flex;flex-wrap:wrap;gap:12px 16px;align-items:end;margin-bottom:12px}
+.ctl .fld{width:150px}
+.crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-bottom:16px}
+.crumbs button{border:0;background:transparent;color:var(--accent);cursor:pointer;padding:2px 4px;font-weight:600;text-decoration:underline;text-underline-offset:3px}
+.crumbs span.cur{font-weight:600}
+.crumbs i{color:var(--muted);font-style:normal}
+.charts{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:20px;margin-bottom:20px}
+@media (max-width:1000px){.charts{grid-template-columns:minmax(0,1fr)}}
+.chartbox{background:var(--surface);border:1px solid var(--rule);border-radius:8px;padding:14px 14px 10px;min-width:0}
+.chartbox h3{margin-bottom:2px}
+.chartbox p{margin:0 0 8px}
+.cscroll{overflow-x:auto}
+.cscroll svg{display:block;min-width:520px;width:100%;height:auto}
+.legend{display:flex;gap:16px;font-size:13px;color:var(--ink2);margin-bottom:6px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+svg text{fill:var(--ink2);font-family:var(--font)}
+svg .grid{stroke:var(--rule)}
+svg .axis{stroke:var(--muted)}
+svg .hit{fill:transparent;cursor:pointer}
+svg .hit:hover{fill:var(--soft);opacity:.55}
+svg .hit:focus-visible{outline:3px solid var(--accent)}
+.mx td:first-child,.mx th:first-child{position:sticky;left:0;background:var(--surface);z-index:1}
+.mx th:first-child{background:var(--soft)}
+.mx tfoot td:first-child{background:var(--soft)}
+.mx .sel{background:var(--soft)}
+.mx td.sel{box-shadow:inset 0 0 0 9999px color-mix(in srgb,var(--accent) 8%,transparent)}
+.rowbtn{border:0;background:transparent;color:var(--accent);cursor:pointer;font-weight:600;text-align:left;padding:0;text-decoration:underline;text-underline-offset:3px;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+.thbtn{border:0;background:transparent;font-weight:600;color:inherit;cursor:pointer;padding:0}
+.thbtn:hover{text-decoration:underline}
+#tip{position:fixed;z-index:20;pointer-events:none;background:var(--ink);color:var(--bg);padding:6px 10px;border-radius:6px;font-size:12.5px;white-space:pre;display:none;max-width:260px}
+/* settings */
+.panel{display:flex;flex-direction:column;gap:14px;max-width:980px}
+.panel .sec:first-child{border-top:0;padding-top:0}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+textarea{min-height:110px;font-family:var(--mono);font-size:12.5px}
+.status{min-height:22px;color:var(--ok);font-weight:500}
+.status.err{color:var(--bad)}
+.empty{padding:28px;text-align:center;color:var(--ink2);border:1px dashed var(--rule);border-radius:8px;background:var(--surface)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div id="app"></div>
+<div id="tip" role="status"></div>
+
+<script>
+/* ===== ENGINE: pure revenue logic, no DOM. Mirrors the "Waterfall" and "SSP" tabs of the source sheet. ===== */
+var MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function P(s){if(!s)return null;var m=/^(\d{4})-(\d{2})-(\d{2})$/.exec(s);return m?{y:+m[1],m:+m[2],d:+m[3]}:null}
+function dim(y,m){return new Date(Date.UTC(y,m,0)).getUTCDate()}
+function dayNum(p){return Math.round(Date.UTC(p.y,p.m-1,p.d)/864e5)}
+function ymi(y,m){return y*12+(m-1)}
+function fromYmi(i){return{y:Math.floor(i/12),m:(i%12)+1}}
+function monLabel(i){var q=fromYmi(i);return MON[q.m-1]+'-'+String(q.y).slice(2)}
+function xround(x,n){var f=Math.pow(10,n);return(x<0?-1:1)*Math.round(Math.abs(x)*f)/f}
+function isLastFeb(p){return p.m===2&&p.d===dim(p.y,2)}
+function yearfrac30(a,b){ /* Sheets YEARFRAC, basis 0 (US 30/360) */
+  var d1=a.d,d2=b.d;
+  if(isLastFeb(a)&&isLastFeb(b))d2=30;
+  if(isLastFeb(a))d1=30;
+  if(d2===31&&d1>=30)d2=30;
+  if(d1===31)d1=30;
+  return((b.y-a.y)*360+(b.m-a.m)*30+(d2-d1))/360;
+}
+function contractLabel(c){
+  if(c.label)return c.label;
+  var s=P(c.start);
+  return (c.customer||'New contract')+(s?'-'+s.y+'-'+MON[s.m-1]:'');
+}
+function buildSchedule(pattern,alloc,st,en,recogIdx){
+  var map=new Map(),startIdx=ymi(st.y,st.m),meta={};
+  if(pattern==='As Delivered'){map.set(recogIdx!=null?recogIdx:startIdx,alloc);meta.point=true;return{map:map,meta:meta}}
+  var days=dayNum(en)-dayNum(st)+1,rate=alloc/days,i0=startIdx,i1=ymi(en.y,en.m);
+  meta.days=days;meta.rate=rate;
+  meta.firstDays=(i0===i1)?days:dim(st.y,st.m)-st.d+1;
+  meta.lastDays=(i0===i1)?days:en.d;
+  for(var i=i0;i<=i1;i++){
+    var d;
+    if(i0===i1)d=days;else if(i===i0)d=meta.firstDays;else if(i===i1)d=meta.lastDays;else{var q=fromYmi(i);d=dim(q.y,q.m)}
+    var tgt=(recogIdx!=null&&i<recogIdx)?recogIdx:i;
+    map.set(tgt,(map.get(tgt)||0)+d*rate);
+  }
+  return{map:map,meta:meta};
+}
+function pickSsp(ssp,sku,startStr){
+  var c=ssp.filter(function(x){return x.sku===sku});
+  if(!c.length)return null;
+  var ok=c.filter(function(x){return !x.effective||(startStr&&x.effective<=startStr)}),pick,early=false;
+  if(ok.length)pick=ok.reduce(function(a,b){return(b.effective||'')>=(a.effective||'')?b:a});
+  else{pick=c.reduce(function(a,b){return(b.effective||'')<(a.effective||'')?b:a});early=true}
+  return{row:pick,early:early};
+}
+function sspNote(label,pk,startStr){
+  var eff=pk.row.effective;
+  return{col:'SSP tab',label:label,how:pk.early?'No version of this SSP was effective on the start date ('+startStr+'), so the earliest version is used.':'The latest version effective on or before the start date ('+startStr+').',val:eff?'Effective '+eff:'Original version (no effective date)',fmt:'text'};
+}
+function computeContract(c,ssp){
+  if(c.mode==='usage')return computeUsage(c,ssp);
+  var res={c:c,uid:c.uid,label:contractLabel(c),customer:c.customer||'(no name)',issues:[],lines:[],ok:false,tcv:+c.tcv||0,steps:[]};
+  var st=P(c.start),en=P(c.end);
+  if(!st||!en)res.issues.push('Enter the start and end dates.');
+  else if(dayNum(en)<dayNum(st))res.issues.push('The end date is before the start date.');
+  if(!(res.tcv>0))res.issues.push('Enter the total contract value.');
+  var lic=c.license||{},pl=pickSsp(ssp,lic.sku,c.start),L=pl&&pl.row;
+  if(!L)res.issues.push('Choose a license SKU.');
+  var sup=c.support||{},ps=sup.sku?pickSsp(ssp,sup.sku,c.start):null,S=ps&&ps.row;
+  if(sup.sku&&!S)res.issues.push('The support SKU is not in the SSP table.');
+  if(res.issues.length)return res;
+  var tm=xround(yearfrac30(st,en)*12,2),ty=tm/12;
+  res.termMonths=tm;res.termYears=ty;res.sspUsed={license:{eff:L.effective||'',early:pl.early}};if(S)res.sspUsed.support={eff:S.effective||'',early:ps.early};
+  res.steps.push({col:'M, N',label:'Contract term',how:'Months = ROUND(YEARFRAC(start, end) × 12, 2). Years = months ÷ 12.',val:tm.toFixed(2)+' months, '+ty.toFixed(4)+' years',fmt:'text'});
+  var isGB=/GB/i.test(L.unit||''),units,unitsHow;
+  if(lic.unitsOverride!==''&&lic.unitsOverride!=null&&!isNaN(+lic.unitsOverride)){units=+lic.unitsOverride;unitsHow='Entered by you in "Units override".'}
+  else if(isGB){units=(+lic.gb||0)*(+lic.qty||0)*ty;unitsHow='Data size (GB) × quantity × term years.'}
+  else{units=ty;unitsHow='Unlimited license is priced per year, so units = term years.'}
+  if(!(units>0)){res.issues.push('License units come to zero. Enter a quantity and data size, or a units override.');return res}
+  var ap=null,aq,aqHow;
+  if(!L.ssp){
+    ap=(+lic.listPrice||0)/units;
+    if(ap>L.low&&ap<L.high){aq=ap;aqHow='Contract price per unit is inside the SSP range ('+L.low+' to '+L.high+'), so it is used as the SSP.'}
+    else{aq=L.med;aqHow='Contract price per unit is outside the SSP range ('+L.low+' to '+L.high+'), so the median is used.'}
+  }else{aq=L.ssp;aqHow='Fixed SSP from the SSP table.'}
+  var licRsp=aq*units;
+  var lines=[];
+  var licSteps=[
+    sspNote('SSP version used for the license',pl,c.start),
+    {col:'AR',label:'Units',how:unitsHow,val:units,fmt:'num4'},
+    {col:'AP',label:'Contract price per unit',how:'Price used for the SSP test ÷ units.',val:ap,fmt:'usd2'},
+    {col:'AQ',label:'Standalone selling price (SSP)',how:aqHow,val:aq,fmt:'usd2'},
+    {col:'AS',label:'Relative selling price',how:'SSP × units.',val:licRsp,fmt:'usd'}
+  ];
+  lines.push({key:'license',stream:L.stream||'License',sku:L.sku,gl:L.gl,pattern:L.pattern,units:units,aq:aq,rsp:licRsp,steps:licSteps});
+  if(S){
+    var sAq=S.ssp||S.med,sRsp=sAq*ty*licRsp;
+    lines.push({key:'support',stream:S.stream||'Support',sku:S.sku,gl:S.gl,pattern:S.pattern,units:ty,aq:sAq,rsp:sRsp,steps:[
+      sspNote('SSP version used for support',ps,c.start),
+      {col:'AR',label:'Units',how:'Support is priced per year, so units = term years.',val:ty,fmt:'num4'},
+      {col:'AQ',label:'Support rate',how:'Support as a share of the license, from the SSP table.',val:sAq,fmt:'pct'},
+      {col:'AS',label:'Relative selling price',how:'Support rate × term years × the license relative selling price.',val:sRsp,fmt:'usd'}
+    ]});
+  }
+  var total=lines.reduce(function(a,l){return a+l.rsp},0);
+  res.totalRsp=total;
+  var recogIdx=null;
+  if(c.recogFrom){var m=/^(\d{4})-(\d{2})$/.exec(c.recogFrom);if(m){var ri=ymi(+m[1],+m[2]);if(ri>ymi(st.y,st.m))recogIdx=ri}}
+  lines.forEach(function(l){
+    l.pct=l.rsp/total;l.alloc=l.pct*res.tcv;
+    l.steps.push({col:'AT',label:'Total relative selling price of the contract',how:'Sum of the relative selling prices of all lines.',val:total,fmt:'usd'});
+    l.steps.push({col:'AU',label:'Share of the contract',how:'Line relative selling price ÷ contract total.',val:l.pct,fmt:'pct2'});
+    l.steps.push({col:'AV',label:'Allocated price',how:'Share × total contract value ('+Math.round(res.tcv).toLocaleString('en-US')+').',val:l.alloc,fmt:'usd'});
+    var sc=buildSchedule(l.pattern,l.alloc,st,en,recogIdx);
+    l.map=sc.map;l.meta=sc.meta;
+    if(sc.meta.point){
+      l.steps.push({col:'AW',label:'Recognition pattern',how:'"As Delivered": the whole allocated price is recognized in one month.',val:'As Delivered',fmt:'text'});
+      var mi=recogIdx!=null?recogIdx:ymi(st.y,st.m);
+      l.steps.push({col:'BC onward',label:'Month recognized',how:recogIdx!=null?'Contract effective after the start date, so recognition begins in the "Recognize from" month.':'Month of the start date.',val:monLabel(mi),fmt:'text'});
+    }else{
+      l.steps.push({col:'AW',label:'Recognition pattern',how:'"Ratable": spread evenly by day across the term.',val:'Ratable',fmt:'text'});
+      l.steps.push({col:'AX',label:'Daily rate',how:'Allocated price ÷ days from start to end, inclusive.',val:l.alloc/sc.meta.days,fmt:'usd4'});
+      l.steps.push({col:'AY, AZ',label:'Days in first and last month',how:'First month counts from the start date. Last month counts to the end date.',val:sc.meta.firstDays+' days, '+sc.meta.lastDays+' days',fmt:'text'});
+      l.steps.push({col:'BA, BB',label:'Revenue in first and last month',how:'Days × daily rate. Months in between use the calendar days in that month.',val:{a:sc.meta.firstDays*sc.meta.rate,b:sc.meta.lastDays*sc.meta.rate},fmt:'pair'});
+      if(recogIdx!=null)l.steps.push({col:'',label:'Catch-up',how:'Revenue earned before '+monLabel(recogIdx)+' is recognized in '+monLabel(recogIdx)+'.',val:'Catch-up in '+monLabel(recogIdx),fmt:'text'});
+    }
+  });
+  res.lines=lines;res.ok=true;
+  var bd=P(c.invoiceDate)||P(c.effective)||st;
+  var extra=(c.invoices||[]).filter(function(x){return P(x.date)&&x.amount!==''&&x.amount!=null&&!isNaN(+x.amount)});
+  var hasExtra=extra.length>0;
+  var primary=(c.invoiced!==''&&c.invoiced!=null&&!isNaN(+c.invoiced))?+c.invoiced:(hasExtra?0:res.tcv);
+  res.bills=[{idx:ymi(bd.y,bd.m),amt:primary}];
+  extra.forEach(function(x){var p=P(x.date);res.bills.push({idx:ymi(p.y,p.m),amt:+x.amount})});
+  return res;
+}
+/* ----- usage-based contracts ----- */
+function computeUsage(c,ssp){
+  var u=c.usage||{};
+  var res={c:c,uid:c.uid,label:contractLabel(c),customer:c.customer||'(no name)',issues:[],lines:[],ok:false,tcv:0,steps:[],mode:'usage'};
+  var st=P(c.start),en=P(c.end);
+  if(!st||!en)res.issues.push('Enter the start and end dates.');
+  else if(dayNum(en)<dayNum(st))res.issues.push('The end date is before the start date.');
+  var pk=u.sku?pickSsp(ssp,u.sku,c.start):null,S=pk&&pk.row;
+  var hasOvr=u.rateOverride!==''&&u.rateOverride!=null&&!isNaN(+u.rateOverride);
+  var rate=hasOvr?+u.rateOverride:(S?(+S.ssp||0):0);
+  if(!hasOvr&&!S)res.issues.push('Choose a usage SKU or enter a rate.');
+  else if(!(rate>0))res.issues.push('The usage rate is zero. Set the SSP for this SKU in Settings, or enter a rate override.');
+  var byIdx={};
+  (u.months||[]).forEach(function(m){
+    var mm=/^(\d{4})-(\d{2})$/.exec(m.ym||'');
+    if(!mm||m.units===''||m.units==null||isNaN(+m.units)||+m.units<0)return;
+    var i=ymi(+mm[1],+mm[2]);byIdx[i]={idx:i,units:+m.units,status:m.status==='Forecast'?'Forecast':'Actual'};
+  });
+  var rows=Object.keys(byIdx).map(function(k){return byIdx[k]}).sort(function(a,b){return a.idx-b.idx});
+  if(!rows.length)res.issues.push('Enter units used for at least one month.');
+  if(res.issues.length)return res;
+  var tm=xround(yearfrac30(st,en)*12,2);res.termMonths=tm;res.termYears=tm/12;
+  if(S)res.sspUsed={usage:{eff:S.effective||'',early:pk.early}};
+  var b=(+u.baseDisc||0)/100,tierOn=u.tierOn==='Yes',T=+u.tierThreshold||0,t=(+u.tierDisc||0)/100,sd=(+u.marketDisc||0)/100;
+  var type=u.tierType==='retro'?'retro':'prospective',C=+u.commit||0;
+  var tierActive=tierOn&&T>0&&t>b;
+  var cb=0,Uab=0,U=0,out=[];
+  rows.forEach(function(r){
+    var o={idx:r.idx,units:r.units,status:r.status,n2:0};
+    if(!tierActive)o.billed=r.units*rate*(1-b);
+    else if(type==='prospective'){var n1=Math.max(0,Math.min(T-cb,r.units));o.n2=r.units-n1;o.billed=rate*(n1*(1-b)+o.n2*(1-t))}
+    else{
+      if(cb>=T)o.billed=r.units*rate*(1-t);
+      else if(cb+r.units>=T)o.billed=r.units*rate*(1-t)-cb*rate*(t-b);
+      else o.billed=r.units*rate*(1-b);
+    }
+    cb+=r.units;U+=r.units;Uab+=o.n2;out.push(o);
+  });
+  var inc=0,mrTotal=0,defer=0,hit=false,pe=rate*(1-b);
+  if(tierActive&&type==='prospective'){
+    inc=Math.max(0,t-Math.max(sd,b));mrTotal=inc*rate*Uab;defer=U>0?mrTotal/U:0;
+    out.forEach(function(o){o.rev=o.billed+o.n2*inc*rate-o.units*defer});
+  }else if(tierActive){
+    hit=U>=T;pe=rate*(1-(hit?t:b));
+    out.forEach(function(o){o.rev=o.units*pe});
+  }else out.forEach(function(o){o.rev=o.billed});
+  var cumDraw=0,sumBilled=0,sumOver=0,sumRev=0;
+  out.forEach(function(o){
+    var d=Math.max(-cumDraw,Math.min(o.billed,C-cumDraw));
+    o.draw=d;o.over=o.billed-d;cumDraw+=d;sumBilled+=o.billed;sumOver+=o.over;sumRev+=o.rev;
+  });
+  var Bk=Math.max(0,C-cumDraw),expire=u.expire!=='No',estimable=u.breakage!=='Not estimable';
+  var expIdx=ymi(en.y,en.m),bkMap=new Map(),usageMap=new Map();
+  out.forEach(function(o){o.bk=0;usageMap.set(o.idx,(usageMap.get(o.idx)||0)+o.rev)});
+  var bkTotal=0;
+  if(Bk>0&&expire){
+    bkTotal=Bk;
+    if(estimable&&sumRev>0)out.forEach(function(o){o.bk=Bk*o.rev/sumRev;bkMap.set(o.idx,o.bk)});
+    else bkMap.set(expIdx,Bk);
+  }
+  var invP=P(c.invoiceDate)||P(c.effective)||st,invIdx=ymi(invP.y,invP.m);
+  var bills=[];if(C>0)bills.push({idx:invIdx,amt:C});
+  out.forEach(function(o){if(o.over>0.005)bills.push({idx:o.idx,amt:o.over})});
+  res.bills=bills;
+  var lo=Math.min(invIdx,out[0].idx),hi=Math.max(out[out.length-1].idx,bkMap.has(expIdx)?expIdx:0),byI={};
+  out.forEach(function(o){byI[o.idx]=o});
+  var cash={};bills.forEach(function(x){cash[x.idx]=(cash[x.idx]||0)+x.amt});
+  var series=[],cc=0,cr=0;
+  for(var i=lo;i<=hi;i++){
+    var o=byI[i],rv=o?o.rev:0,bk=bkMap.get(i)||0;
+    cc+=cash[i]||0;cr+=rv+bk;
+    series.push({idx:i,units:o?o.units:0,status:o?o.status:'Actual',billed:o?o.billed:0,cash:cash[i]||0,rev:rv,bk:bk,liab:cc-cr});
+  }
+  var total=sumRev+bkTotal;
+  res.tcv=C+sumOver;
+  var mk=function(key,label,map,alloc){return{key:key,stream:'Usage',label:label,sku:S?S.sku:'Rate override',gl:S?S.gl:'',pattern:'As used',map:map,alloc:alloc,pct:total>0?alloc/total:0,steps:[]}};
+  res.lines.push(mk('usage','Usage revenue',usageMap,sumRev));
+  if(bkTotal>0)res.lines.push(mk('breakage','Breakage',bkMap,bkTotal));
+  res.usage={rate:rate,series:series,U:U,Uab:Uab,sumBilled:sumBilled,sumOver:sumOver,Bk:Bk,bkTotal:bkTotal,inc:inc,mrTotal:mrTotal,tierActive:tierActive,type:type,hit:hit,C:C,sumRev:sumRev};
+  var steps=res.steps;
+  if(S)steps.push(sspNote('SSP version used for the rate',pk,c.start));
+  steps.push({col:'Rate',label:'List price per unit',how:hasOvr?'Entered by you as a rate override.':'The standalone selling price from the SSP table.',val:rate,fmt:'usd4'});
+  steps.push({col:'Price',label:'Price per unit after the base discount',how:'List price × (1 − base discount of '+(b*100).toFixed(1)+'%).',val:rate*(1-b),fmt:'usd4'});
+  steps.push({col:'Units',label:'Units used, actual and forecast',how:'Sum of the monthly units entered.',val:U,fmt:'int'});
+  if(tierActive){
+    steps.push({col:'Tier',label:'Price per unit at the volume tier',how:'List price × (1 − tier discount of '+(t*100).toFixed(1)+'%). The tier starts at '+Math.round(T).toLocaleString('en-US')+' units.',val:rate*(1-t),fmt:'usd4'});
+    if(type==='prospective'){
+      steps.push({col:'Tier',label:'Expected units above the tier threshold',how:'Units that will be priced at the tier rate.',val:Uab,fmt:'int'});
+      steps.push({col:'Test',label:'Extra discount beyond what any customer would get',how:'Tier discount ('+(t*100).toFixed(1)+'%) less the larger of the market discount ('+(sd*100).toFixed(1)+'%) and the base discount ('+(b*100).toFixed(1)+'%). Above zero means a material right.',val:inc,fmt:'pct2'});
+      steps.push({col:'Test',label:'Material right amount',how:'Extra discount × list price × expected units above the threshold. It is deferred and spread over all expected usage.',val:mrTotal,fmt:'usd'});
+    }else{
+      steps.push({col:'Tier',label:'Expected to reach the tier',how:'The tier price resets the price on all usage, so it is a retroactive rebate (variable consideration). Revenue uses the expected final price from the first unit.',val:hit?'Yes, '+Math.round(U).toLocaleString('en-US')+' expected vs '+Math.round(T).toLocaleString('en-US')+' needed':'No, '+Math.round(U).toLocaleString('en-US')+' expected vs '+Math.round(T).toLocaleString('en-US')+' needed',fmt:'text'});
+      steps.push({col:'Price',label:'Price per unit used for revenue',how:'The expected final price per unit.',val:pe,fmt:'usd4'});
+    }
+  }
+  steps.push({col:'Usage',label:'Usage at the billed rates',how:'Units × price per unit, with the tier applied.',val:sumBilled,fmt:'usd'});
+  steps.push({col:'Commit',label:'Prepaid commitment',how:'Paid at the invoice date and drawn down as usage is billed.',val:C,fmt:'usd'});
+  steps.push({col:'Commit',label:'Usage billed on top of the commitment',how:'Usage beyond the commitment is invoiced in the month it happens.',val:sumOver,fmt:'usd'});
+  steps.push({col:'Breakage',label:'Unused commitment',how:C<=0?'There is no prepaid commitment.':(Bk<=0?'The commitment is expected to be fully used.':(!expire?'Credits roll over or are refundable, so the unused amount stays a liability.':(estimable?'Credits expire. The unused amount is recognized in proportion to usage.':'Credits expire but breakage cannot be estimated reliably, so it is recognized at expiry ('+monLabel(expIdx)+').'))),val:Bk,fmt:'usd'});
+  steps.push({col:'Total',label:'Total revenue expected',how:'Usage revenue plus breakage.',val:total,fmt:'usd'});
+  res.ok=true;
+  return res;
+}
+
+/* ----- fiscal calendar ----- */
+function fiscalOf(idx,fyStart){var q=fromYmi(idx),fm=(q.m-fyStart+12)%12,fy=q.y+((fyStart>1&&q.m>=fyStart)?1:0);return{fy:fy,fm:fm,q:Math.floor(fm/3)+1}}
+function bucketOf(idx,gran,fyStart){
+  if(gran==='month')return{key:'m'+idx,label:monLabel(idx),start:idx,end:idx};
+  var f=fiscalOf(idx,fyStart);
+  if(gran==='quarter'){var s=idx-(f.fm%3);return{key:'q'+s,label:'FY'+String(f.fy).slice(2)+' Q'+f.q,start:s,end:s+2}}
+  var s2=idx-f.fm;return{key:'y'+s2,label:'FY'+String(f.fy).slice(2),start:s2,end:s2+11};
+}
+function makePeriods(from,to,gran,fyStart){var out=[],i=from,guard=0;while(i<=to&&guard++<400){var b=bucketOf(i,gran,fyStart);out.push(b);i=b.end+1}return out}
+/* ----- reporting ----- */
+function flatten(results){
+  var rows=[],bill=[];
+  results.forEach(function(r){
+    if(!r.ok)return;
+    r.lines.forEach(function(l){rows.push({uid:r.uid,label:r.label,customer:r.customer,stream:l.stream,lineLabel:l.label||l.stream,key:l.key,sku:l.sku,gl:l.gl,map:l.map,alloc:l.alloc})});
+    r.bills.forEach(function(b){bill.push({uid:r.uid,customer:r.customer,idx:b.idx,amt:b.amt})});
+  });
+  return{rows:rows,bill:bill};
+}
+function inScope(x,d){
+  if(d.customer!=null&&x.customer!==d.customer)return false;
+  if(d.uid!=null&&x.uid!==d.uid)return false;
+  if(d.key!=null&&x.key!==d.key)return false;
+  return true;
+}
+function sumRange(map,lo,hi){var s=0;map.forEach(function(v,i){if(i>=lo&&i<=hi)s+=v});return s}
+function rowVals(map,periods){
+  var first=periods[0].start,last=periods[periods.length-1].end;
+  var vals=[sumRange(map,-1e9,first-1)];
+  periods.forEach(function(p){vals.push(sumRange(map,p.start,p.end))});
+  vals.push(sumRange(map,last+1,1e9));
+  var t=0;vals.forEach(function(v){t+=v});vals.push(t);
+  return vals;
+}
+function buildMatrix(flat,periods,d){
+  var scope=flat.rows.filter(function(x){return inScope(x,d)});
+  var level=d.key!=null?3:d.uid!=null?2:d.customer!=null?1:0;
+  var groups=new Map();
+  scope.forEach(function(x){
+    var k,label,sub;
+    if(level===0){k=x.customer;label=x.customer;sub=''}
+    else if(level===1){k=x.uid;label=x.label;sub=''}
+    else{k=x.key;label=x.lineLabel||x.stream;sub=x.sku}
+    if(!groups.has(k))groups.set(k,{key:k,label:label,sub:sub,maps:[]});
+    groups.get(k).maps.push(x.map);
+  });
+  var rows=[];
+  groups.forEach(function(g){
+    var vals=null;
+    g.maps.forEach(function(m){var v=rowVals(m,periods);vals=vals?vals.map(function(a,i){return a+v[i]}):v});
+    g.vals=vals;rows.push(g);
+  });
+  rows.sort(function(a,b){return b.vals[b.vals.length-1]-a.vals[a.vals.length-1]});
+  var tot=periods.length+3,totals=new Array(tot).fill(0);
+  rows.forEach(function(r){r.vals.forEach(function(v,i){totals[i]+=v})});
+  return{level:level,rows:rows,totals:totals};
+}
+function streamSeries(flat,periods,d){
+  var scope=flat.rows.filter(function(x){return inScope(x,d)});
+  var out=periods.map(function(){return{License:0,Support:0,Usage:0}});
+  scope.forEach(function(x){periods.forEach(function(p,i){var s=sumRange(x.map,p.start,p.end);out[i][x.stream==='Support'?'Support':(x.stream==='Usage'?'Usage':'License')]+=s})});
+  return out;
+}
+function bridge(flat,period,d){
+  var rows=flat.rows.filter(function(x){return inScope(x,d)});
+  var uids=new Set(rows.map(function(x){return x.uid}));
+  var bills=flat.bill.filter(function(b){return uids.has(b.uid)});
+  var billBefore=0,billIn=0,revBefore=0,rev={License:0,Support:0,Usage:0},present={License:false,Support:false,Usage:false};
+  bills.forEach(function(b){if(b.idx<period.start)billBefore+=b.amt;else if(b.idx<=period.end)billIn+=b.amt});
+  rows.forEach(function(x){
+    var k=x.stream==='Support'?'Support':(x.stream==='Usage'?'Usage':'License');
+    present[k]=true;
+    revBefore+=sumRange(x.map,-1e9,period.start-1);
+    rev[k]+=sumRange(x.map,period.start,period.end);
+  });
+  var open=billBefore-revBefore;
+  return{open:open,billings:billIn,license:rev.License,support:rev.Support,usage:rev.Usage,present:present,close:open+billIn-rev.License-rev.Support-rev.Usage};
+}
+/* ----- defaults ----- */
+var DEFAULT_SSP=[
+ {sku:'BryteFlow License',stream:'License',unit:'Price per GB per year',ssp:0,low:30,high:110,med:70,pattern:'As Delivered',gl:'40200 - Bryteflow - license'},
+ {sku:'BryteFlow License - Unlimited',stream:'License',unit:'Price per year',ssp:0,low:64800,high:135300,med:100000,pattern:'As Delivered',gl:'40200 - Bryteflow - license'},
+ {sku:'BryteFlow Premium Support',stream:'Support',unit:'Support as % of licenses',ssp:0.35,low:0,high:0,med:0,pattern:'Ratable',gl:'40210 - Bryteflow - support'},
+ {sku:'BryteFlow Standard Support',stream:'Support',unit:'Support as % of licenses',ssp:0.2,low:0,high:0,med:0,pattern:'Ratable',gl:'40210 - Bryteflow - support'}
+];
+
+</script>
+<script>
+(function(){
+'use strict';
+var KEY='rev-rec-ledger-v1';
+var FLAGQ=['On customer paper (not our standard template)','Promise of future functionality','Other free products or credits given','Volume price discount (usually a chart is included)','Promise of future discount greater than the discount in this order','Renewal below $500 per unit or $1.00 per credit','Remedies beyond the standard SLA','Payments or other consideration made to the customer','Right to cancel after the initial term','Contract supersedes previous ones','Two or more contracts negotiated together or for one commercial objective','Any other non-standard terms'];
+var SSP0=[
+ {sku:'Platform license (per GB)',stream:'License',unit:'Price per GB per year',ssp:0,low:25,high:95,med:60,pattern:'As Delivered',gl:'40200 - Software license'},
+ {sku:'Platform license - Unlimited',stream:'License',unit:'Price per year',ssp:0,low:50000,high:120000,med:85000,pattern:'As Delivered',gl:'40200 - Software license'},
+ {sku:'Platform license - Unlimited',effective:'2025-06-01',stream:'License',unit:'Price per year',ssp:0,low:60000,high:130000,med:90000,pattern:'As Delivered',gl:'40200 - Software license'},
+ {sku:'Premium support',stream:'Support',unit:'Support as % of licenses',ssp:0.35,low:0,high:0,med:0,pattern:'Ratable',gl:'40210 - Support'},
+ {sku:'Standard support',stream:'Support',unit:'Support as % of licenses',ssp:0.2,low:0,high:0,med:0,pattern:'Ratable',gl:'40210 - Support'},
+ {sku:'Platform credits',effective:'',stream:'Usage',unit:'Credits',ssp:1,low:0,high:0,med:0,pattern:'As Delivered',gl:'40300 - Usage'},
+ {sku:'Model tokens (per 1M)',effective:'',stream:'Usage',unit:'Tokens',ssp:5,low:0,high:0,med:0,pattern:'As Delivered',gl:'40300 - Usage'},
+ {sku:'Model tokens (per 1M)',effective:'2025-07-01',stream:'Usage',unit:'Tokens',ssp:4,low:0,high:0,med:0,pattern:'As Delivered',gl:'40300 - Usage'}
+];
+function demo(){
+  function mk(i,cust,a){var c={uid:'d'+i,customer:cust,buyerId:'',label:'',notes:a.notes||'',invoiceId:'',invoiceDate:a.inv||a.eff||a.start,paymentDate:'',invoiced:a.invoiced||'',invoices:a.extra||[],fees:'',effective:a.eff||a.start,start:a.start,end:a.end,tcv:a.tcv,currency:'USD',license:{sku:a.sku,qty:a.qty||'',uom:a.uom||'',gb:a.gb||'',listPrice:a.list,unitsOverride:''},support:{sku:a.sup},recogFrom:a.rf||'',flags:['','','','','','','','','','','','']};(a.yes||[]).forEach(function(k){c.flags[k]='Yes'});return c}
+  return [
+   mk(1,'Northwind Analytics',{start:'2025-01-15',end:'2026-01-14',tcv:96000,list:92000,sku:'Platform license - Unlimited',sup:'Premium support',notes:'Illustrative example'}),
+   mk(2,'Contoso Retail',{start:'2025-03-01',end:'2026-02-28',tcv:64000,list:61000,sku:'Platform license (per GB)',qty:5,uom:'License',gb:200,sup:'Standard support',notes:'Per-GB pricing'}),
+   mk(3,'Fabrikam Health',{start:'2025-04-01',end:'2028-03-31',tcv:330000,list:300000,sku:'Platform license - Unlimited',sup:'Premium support',notes:'Three-year term, billed each year',invoiced:110000,extra:[{date:'2026-04-01',amount:110000},{date:'2027-04-01',amount:110000}]}),
+   mk(4,'Tailspin Logistics',{start:'2025-02-10',end:'2026-02-09',tcv:41500,list:40000,sku:'Platform license - Unlimited',sup:'Standard support',notes:'Price below SSP range, so the median is used'}),
+   mk(5,'Adventure Works',{start:'2025-02-01',end:'2025-07-31',eff:'2025-05-14',rf:'2025-05',tcv:28000,list:26000,sku:'Platform license (per GB)',qty:2,uom:'License',gb:300,sup:'Standard support',notes:'Signed after the service period began, so earlier revenue is caught up in May'}),
+   mk(6,'Litware Bio',{start:'2025-06-20',end:'2026-06-19',tcv:118000,list:110000,sku:'Platform license - Unlimited',sup:'Premium support',yes:[2,3],notes:'Free credits and a volume discount chart'})
+  ].concat(usageDemo());
+}
+function ymAdd(ym,n){var a=ym.split('-'),i=(+a[0])*12+(+a[1])-1+n;return Math.floor(i/12)+'-'+String(i%12+1).padStart(2,'0')}
+function usageMonths(start,actual,growth,total){var out=[],u=0;for(var i=0;i<total;i++){var s='Actual';if(i<actual.length)u=actual[i];else{u=u*(1+growth/100);s='Forecast'}out.push({ym:ymAdd(start,i),units:Math.round(u),status:s})}return out}
+function usageDemo(){
+  function ub(i,cust,a){return{uid:'u'+i,customer:cust,mode:'usage',buyerId:'',label:'',notes:a.notes||'',invoiceId:'',invoiceDate:a.inv||a.start,paymentDate:'',invoiced:'',invoices:[],fees:'',effective:a.start,start:a.start,end:a.end,tcv:'',currency:'USD',license:{sku:'',qty:'',uom:'',gb:'',listPrice:'',unitsOverride:''},support:{sku:''},usage:Object.assign({sku:'',rateOverride:'',commit:'',baseDisc:0,tierOn:'No',tierThreshold:'',tierDisc:'',tierType:'prospective',marketDisc:'',expire:'Yes',breakage:'Estimable',growth:'',months:[]},a.usage),recogFrom:'',flags:['','','','','','','','','','','','']}}
+  return [
+   ub(1,'Globex AI',{start:'2025-01-01',end:'2025-12-31',inv:'2025-01-05',notes:'Prepaid credits with a deeper discount above 60,000 credits',usage:{sku:'Platform credits',commit:120000,baseDisc:15,tierOn:'Yes',tierThreshold:60000,tierDisc:40,tierType:'prospective',marketDisc:25,growth:12,months:usageMonths('2025-01',[8000,9500,11000,13000,15000,17500],12,12)}}),
+   ub(2,'Initech Labs',{start:'2025-03-01',end:'2026-02-28',notes:'Prepaid tokens, price resets on all usage at 3,000',usage:{sku:'Model tokens (per 1M)',commit:40000,baseDisc:10,tierOn:'Yes',tierThreshold:3000,tierDisc:30,tierType:'retro',marketDisc:'',growth:8,months:usageMonths('2025-03',[150,220,300,380,450,520],8,12)}}),
+   ub(3,'Umbrella Data',{start:'2025-04-01',end:'2026-03-31',notes:'Pay as you go, no commitment',usage:{sku:'Platform credits',commit:'',baseDisc:0,tierOn:'No',growth:'',months:usageMonths('2025-04',[3000,3400,3900,4200,4800,5100],0,6)}})
+  ];
+}
+var S={contracts:[],ssp:SSP0.map(function(x){return Object.assign({},x)}),settings:{fyStart:1,cutover:'',currency:'USD'},
+  ui:{tab:'contracts',sel:null,calc:false,q:'',confirm:'',rep:{gran:'quarter',from:'',to:'',drill:{},period:null},msg:'',err:false,import:''},demoLoaded:true};
+function save(){try{localStorage.setItem(KEY,JSON.stringify({contracts:S.contracts,ssp:S.ssp,settings:S.settings,demoLoaded:S.demoLoaded}))}catch(e){}}
+function load(){
+  try{var raw=localStorage.getItem(KEY);if(raw){var d=JSON.parse(raw);if(d&&Array.isArray(d.contracts)){S.contracts=d.contracts;S.ssp=d.ssp||S.ssp;S.settings=Object.assign(S.settings,d.settings||{});S.demoLoaded=!!d.demoLoaded;return}}}catch(e){}
+  S.contracts=demo();
+}
+load();
+S.ui.sel=S.contracts.length?S.contracts[0].uid:null;
+var $=function(s){return document.querySelector(s)};
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function usd(n){if(n==null||isNaN(n))return '–';var r=Math.round(n);if(r===0)return '–';return r<0?'('+Math.abs(r).toLocaleString('en-US')+')':r.toLocaleString('en-US')}
+function usdS(n){return '$'+Math.round(n).toLocaleString('en-US')}
+function cmp(n){var a=Math.abs(n),s=n<0?'-':'';if(a>=1e6)return s+'$'+(a/1e6).toFixed(a>=1e7?1:2).replace(/\.?0+$/,'')+'M';if(a>=1e3)return s+'$'+(a/1e3).toFixed(a>=1e5?0:1).replace(/\.0$/,'')+'K';return s+'$'+Math.round(a)}
+function fmtStep(v,f){
+  if(v==null||(typeof v==='number'&&isNaN(v)))return '–';
+  switch(f){case 'usd':return usdS(v);case 'usd2':return '$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});case 'usd4':return '$'+Number(v).toFixed(4);case 'num4':return Number(v).toFixed(4);case 'pct':return (v*100).toFixed(0)+'%';case 'pct2':return (v*100).toFixed(2)+'%';case 'int':return Math.round(v).toLocaleString('en-US');case 'pair':return 'First '+usdS(v.a)+', last '+usdS(v.b);default:return String(v)}
+}
+function results(){return S.contracts.map(function(c){return computeContract(c,S.ssp)})}
+function cur(){return S.contracts.filter(function(c){return c.uid===S.ui.sel})[0]||null}
+function flagCount(c){return (c.flags||[]).filter(function(x){return x==='Yes'}).length}
+function ensureUsage(c){if(!c.usage)c.usage={sku:uniqSkus('Usage')[0]||'',rateOverride:'',commit:'',baseDisc:0,tierOn:'No',tierThreshold:'',tierDisc:'',tierType:'prospective',marketDisc:'',expire:'Yes',breakage:'Estimable',growth:'',months:[]};if(!c.usage.months)c.usage.months=[]}
+function termList(c){var s=P(c.start),e=P(c.end),a=[];if(!s||!e)return a;for(var i=ymi(s.y,s.m);i<=ymi(e.y,e.m)&&a.length<60;i++){var q=fromYmi(i);a.push(q.y+'-'+String(q.m).padStart(2,'0'))}return a}
+function sortMonths(c){c.usage.months.sort(function(a,b){return String(a.ym||'9999-99')<String(b.ym||'9999-99')?-1:1})}
+function uid(){return 'c'+Date.now().toString(36)+Math.floor(Math.random()*1e4).toString(36)}
+function blank(){
+  var lic0=uniqSkus('License')[0],sup0=uniqSkus('Support')[0];
+  return{uid:uid(),customer:'',buyerId:'',label:'',notes:'',invoiceId:'',invoiceDate:'',paymentDate:'',invoiced:'',invoices:[],fees:'',effective:'',start:'',end:'',tcv:'',currency:S.settings.currency||'USD',license:{sku:lic0||'',qty:'',uom:'',gb:'',listPrice:'',unitsOverride:''},support:{sku:sup0||''},recogFrom:'',flags:['','','','','','','','','','','','']};
+}
+/* ---------- views ---------- */
+function header(){
+  var t=S.ui.tab;
+  return '<div class="top"><div class="brand"><h1>Rev Rec Ledger</h1><p>ASC 606 revenue from your deal inputs, with the working shown</p></div>'+
+  '<div class="tabs" role="tablist" aria-label="Sections">'+
+  [['contracts','Contracts'],['report','Report'],['settings','Settings and data']].map(function(x){return '<button class="tab" role="tab" aria-selected="'+(t===x[0])+'" data-act="tab" data-v="'+x[0]+'">'+x[1]+'</button>'}).join('')+
+  '</div><button class="ghost" data-act="theme" aria-label="Switch light or dark theme">Theme</button></div>';
+}
+function listHtml(res){
+  var q=S.ui.q.trim().toLowerCase();
+  var items=res.filter(function(r){return !q||(r.customer+' '+r.label).toLowerCase().indexOf(q)>-1});
+  if(!items.length)return '<div class="empty">'+(S.contracts.length?'No contracts match your search.':'No contracts yet. Choose Add contract to enter the first one.')+'</div>';
+  return items.map(function(r){
+    var c=r.c,badge=(c.mode==='usage'?'<span class="pill">Usage</span> ':'')+(!r.ok?'<span class="pill warn">Needs input</span>':(flagCount(c)?'<span class="pill warn">'+flagCount(c)+' to review</span>':''));
+    return '<button class="citem" data-act="select" data-uid="'+esc(c.uid)+'" aria-current="'+(c.uid===S.ui.sel)+'"><span class="r1"><span>'+esc(c.customer||'New contract')+'</span><span class="num">'+(c.mode==='usage'?(r.ok?usdS(r.tcv):''):(c.tcv?usdS(+c.tcv):''))+'</span></span><span class="r2"><span>'+esc(c.start||'No dates')+(c.end?' to '+esc(c.end):'')+'</span>'+badge+'</span></button>';
+  }).join('');
+}
+function fld(label,path,val,o){
+  o=o||{};var id='f-'+path.replace(/\./g,'-');
+  var inner;
+  if(o.options){inner='<select id="'+id+'" data-p="'+path+'">'+o.options.map(function(op){return '<option value="'+esc(op[0])+'"'+(String(val)===String(op[0])?' selected':'')+'>'+esc(op[1])+'</option>'}).join('')+'</select>'}
+  else inner='<input id="'+id+'" data-p="'+path+'" type="'+(o.type||'text')+'" '+(o.type==='number'?'data-num="1" step="any" inputmode="decimal" ':'')+'value="'+esc(val)+'"'+(o.ph?' placeholder="'+esc(o.ph)+'"':'')+'>';
+  return '<label class="fld"><span>'+label+'</span>'+inner+((o.hint||o.hk)?'<small'+(o.hk?' data-hint="'+o.hk+'"':'')+'>'+(o.hint||'')+'</small>':'')+'</label>';
+}
+function uniqSkus(stream){var seen={},out=[];S.ssp.forEach(function(x){if(x.stream===stream&&!seen[x.sku]){seen[x.sku]=1;out.push(x.sku)}});return out}
+function sspHint(r,k){var u=r.sspUsed&&r.sspUsed[k];if(!u)return '';return u.early?'No SSP version was effective at the start date, so the earliest is used.':(u.eff?'Using the SSP effective '+esc(u.eff)+'.':'Using the original SSP.')}
+var UOMS=['License','Seats','Credits','Tokens'];
+function uomOptions(cur){
+  var o=[['','Select a unit']].concat(UOMS.map(function(u){return [u,u]}));
+  if(cur&&UOMS.indexOf(cur)<0)o.push([cur,cur]);
+  return o;
+}
+function invHtml(c){
+  var rows=(c.invoices||[]).map(function(x,i){return '<div class="row"><label class="fld" style="width:170px"><span>Date</span><input id="f-invoices-'+i+'-date" data-p="invoices.'+i+'.date" type="date" value="'+esc(x.date)+'"></label><label class="fld" style="width:170px"><span>Amount</span><input id="f-invoices-'+i+'-amount" data-p="invoices.'+i+'.amount" data-num="1" type="number" step="any" value="'+esc(x.amount)+'"></label><button class="ghost" data-act="invdel" data-i="'+i+'">Remove</button></div>'}).join('');
+  return '<div class="sec" style="border-top:0;padding-top:0"><h3 class="sm" style="font-weight:600">Later invoices</h3><p class="muted sm" style="margin:0">Add each further invoice, such as the second and third annual bills on a multi-year contract. The bridge on the Report tab uses them.</p>'+rows+'<div><button class="ghost" data-act="invadd">Add invoice</button></div></div>';
+}
+function allocTable(r){
+  if(!r.ok)return '<ul class="issues">'+r.issues.map(function(i){return '<li>'+esc(i)+'</li>'}).join('')+'</ul>';
+  var first=Infinity,last=-Infinity;
+  r.lines.forEach(function(l){l.map.forEach(function(v,i){if(i<first)first=i;if(i>last)last=i})});
+  var body=r.lines.map(function(l){
+    return '<tr><td>'+esc(l.stream)+' <span class="muted sm">'+esc(l.sku)+'</span></td><td>'+(l.key==='support'?fmtStep(l.aq,'pct'):usdS(l.aq))+'</td><td>'+usdS(l.rsp)+'</td><td>'+(l.pct*100).toFixed(1)+'%</td><td>'+usdS(l.alloc)+'</td><td>'+esc(l.pattern)+'</td></tr>';
+  }).join('');
+  return '<div class="tablewrap"><table><thead><tr><th>Line</th><th>SSP</th><th>Relative price</th><th>Share</th><th>Allocated</th><th>Recognized</th></tr></thead><tbody>'+body+'</tbody><tfoot><tr><td>Contract total</td><td></td><td>'+usdS(r.totalRsp)+'</td><td>100%</td><td>'+usdS(r.tcv)+'</td><td>'+monLabel(first)+' to '+monLabel(last)+'</td></tr></tfoot></table></div>';
+}
+function calcHtml(r){
+  if(!r.ok)return '';
+  var h='<div class="calc"><div><h3>Contract term</h3><div class="tablewrap"><table class="steps"><tbody>'+r.steps.map(stepRow).join('')+'</tbody></table></div></div>';
+  r.lines.forEach(function(l){
+    h+='<div><h3>'+esc(l.stream)+': '+esc(l.sku)+'</h3><div class="tablewrap"><table class="steps"><tbody>'+l.steps.map(stepRow).join('')+'</tbody></table></div></div>';
+  });
+  var first=Infinity,last=-Infinity;
+  r.lines.forEach(function(l){l.map.forEach(function(v,i){if(i<first)first=i;if(i>last)last=i})});
+  var rows='',tl=0,ts=0;
+  for(var i=first;i<=last;i++){
+    var lic=0,sup=0;r.lines.forEach(function(l){var v=l.map.get(i)||0;if(l.stream==='Support')sup+=v;else lic+=v});
+    tl+=lic;ts+=sup;
+    rows+='<tr><td>'+monLabel(i)+'</td><td>'+usd(lic)+'</td><td>'+usd(sup)+'</td><td>'+usd(lic+sup)+'</td></tr>';
+  }
+  h+='<div><h3>Revenue by month</h3><div class="tablewrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>Month</th><th>License</th><th>Support</th><th>Total</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><td>Total</td><td>'+usd(tl)+'</td><td>'+usd(ts)+'</td><td>'+usd(tl+ts)+'</td></tr></tfoot></table></div></div></div>';
+  return h;
+}
+function stepRow(s){return '<tr><td>'+esc(s.col)+'</td><td>'+esc(s.label)+'</td><td class="wrap">'+esc(s.how)+'</td><td>'+esc(fmtStep(s.val,s.fmt))+'</td></tr>'}
+function usageTable(r){
+  if(!r.ok)return '<ul class="issues">'+r.issues.map(function(i){return '<li>'+esc(i)+'</li>'}).join('')+'</ul>';
+  var I=r.usage,tu=0,tb=0,tc=0,tr=0,tk=0;
+  var rows=I.series.map(function(s){tu+=s.units;tb+=s.billed;tc+=s.cash;tr+=s.rev;tk+=s.bk;
+    return '<tr><td>'+monLabel(s.idx)+(s.units&&s.status==='Forecast'?' <span class="pill">Forecast</span>':'')+'</td><td>'+(s.units?Math.round(s.units).toLocaleString('en-US'):'–')+'</td><td>'+usd(s.billed)+'</td><td>'+usd(s.cash)+'</td><td>'+usd(s.rev)+'</td><td>'+usd(s.bk)+'</td><td>'+usd(s.rev+s.bk)+'</td><td>'+usd(s.liab)+'</td></tr>'}).join('');
+  return '<div class="tablewrap" style="max-height:420px;overflow:auto"><table><thead><tr><th>Month</th><th>Units</th><th>Usage at rates</th><th>Invoiced</th><th>Usage revenue</th><th>Breakage</th><th>Total revenue</th><th>Contract liability</th></tr></thead><tbody>'+rows+'</tbody><tfoot><tr><td>Total</td><td>'+Math.round(tu).toLocaleString('en-US')+'</td><td>'+usd(tb)+'</td><td>'+usd(tc)+'</td><td>'+usd(tr)+'</td><td>'+usd(tk)+'</td><td>'+usd(tr+tk)+'</td><td></td></tr></tfoot></table></div><p class="muted sm" style="margin:6px 0 0">Contract liability is cash invoiced less revenue recognized. Brackets mean revenue is ahead of billing.</p>';
+}
+function usageCalcHtml(r){
+  if(!r.ok)return '';
+  return '<div class="calc"><div><h3>How the revenue is worked out</h3><div class="tablewrap"><table class="steps"><tbody>'+r.steps.map(stepRow).join('')+'</tbody></table></div></div></div>';
+}
+function usageForm(c,r){
+  var us=c.usage||{},sk=uniqSkus('Usage'),pk=us.sku?pickSsp(S.ssp,us.sku,c.start):null;
+  var hint=usageHint(c);
+  var yn=[['Yes','Yes'],['No','No']];
+  var g='<div class="grid">'+
+   fld('Usage SKU','usage.sku',us.sku,{options:[['','Choose a SKU']].concat(sk.map(function(x){return [x,x]})),hint:hint,hk:'usage'})+
+   fld('Rate override ($ per unit)','usage.rateOverride',us.rateOverride,{type:'number',hint:'Optional. Replaces the SSP table rate.'})+
+   fld('Prepaid commitment','usage.commit',us.commit,{type:'number',hint:'Paid at the invoice date. Leave blank for pay as you go.'})+
+   fld('Base discount (%)','usage.baseDisc',us.baseDisc,{type:'number'})+
+   fld('Volume tier','usage.tierOn',us.tierOn,{options:yn})+
+   (us.tierOn==='Yes'?fld('Tier starts at (units)','usage.tierThreshold',us.tierThreshold,{type:'number'})+fld('Total discount at the tier (%)','usage.tierDisc',us.tierDisc,{type:'number'})+fld('How the tier works','usage.tierType',us.tierType,{options:[['prospective','Lower price on usage above the threshold'],['retro','Price resets on all usage once reached']]})+(us.tierType!=='retro'?fld('Market discount at this volume (%)','usage.marketDisc',us.marketDisc,{type:'number',hint:'What a similar customer gets without a special deal. A tier deeper than this is a material right.'}):''):'')+
+   fld('Unused commitment','usage.expire',us.expire,{options:[['Yes','Expires with no refund'],['No','Rolls over or is refundable']]})+
+   (us.expire!=='No'?fld('Breakage estimate','usage.breakage',us.breakage,{options:[['Estimable','Can be estimated reliably'],['Not estimable','Cannot be estimated reliably']]}):'')+
+   '</div>';
+  var rows=(us.months||[]).map(function(m,i){return '<tr><td><input id="f-usage-months-'+i+'-ym" data-p="usage.months.'+i+'.ym" type="month" value="'+esc(m.ym)+'" aria-label="Month"></td><td><input id="f-usage-months-'+i+'-units" data-p="usage.months.'+i+'.units" data-num="1" type="number" step="any" value="'+esc(m.units)+'" aria-label="Units"></td><td><select id="f-usage-months-'+i+'-status" data-p="usage.months.'+i+'.status" aria-label="Status"><option'+(m.status!=='Forecast'?' selected':'')+'>Actual</option><option'+(m.status==='Forecast'?' selected':'')+'>Forecast</option></select></td><td><button class="ghost" data-act="mondel" data-i="'+i+'">Remove</button></td></tr>'}).join('');
+  var mt='<div class="sec" style="border-top:0;padding-top:0"><h3 class="sm" style="font-weight:600">Monthly usage</h3><p class="muted sm" style="margin:0">Enter units used each month. Mark months you have not billed yet as Forecast. Forecast months fill in from the last actual month at the monthly growth you set.</p>'+
+   '<div class="row"><label class="fld" style="width:170px"><span>Monthly growth for forecast (%)</span><input id="f-usage-growth" data-p="usage.growth" data-num="1" type="number" step="any" value="'+esc(us.growth)+'"></label><button class="ghost" data-act="monfill">Add all months in the term</button><button class="ghost" data-act="monfc">Fill forecast months</button><button class="ghost" data-act="monadd">Add month</button></div>'+
+   (rows?'<div class="tablewrap" style="max-height:360px;overflow:auto"><table><thead><tr><th>Month</th><th>Units</th><th>Status</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>':'<div class="empty">No months yet. Choose Add all months in the term, then enter the units.</div>')+'</div>';
+  return '<div class="sec"><h3>Usage pricing</h3>'+g+mt+'</div>';
+}
+function editorTop(res,c){
+  var r=res.filter(function(x){return x.uid===c.uid})[0],usage=c.mode==='usage',h='';
+  if(usage){
+    var us=r.ok?r.usage:null;
+    h+='<div class="summary"><div><b class="num">'+(r.ok?usdS(r.tcv):'–')+'</b><span>Total consideration</span></div><div><b class="num">'+(r.ok?usdS(us.sumRev):'–')+'</b><span>Usage revenue</span></div><div><b class="num">'+(r.ok?usdS(us.bkTotal):'–')+'</b><span>Breakage</span></div><div><b class="num">'+(r.ok?Math.round(us.U).toLocaleString('en-US'):'–')+'</b><span>Units, actual and forecast</span></div></div>';
+    h+=usageTable(r);
+    if(S.ui.calc)h+=usageCalcHtml(r);
+  }else{
+    var licAlloc=r.ok?r.lines[0].alloc:0,supAlloc=(r.ok&&r.lines[1])?r.lines[1].alloc:0;
+    h+='<div class="summary"><div><b class="num">'+(r.ok?usdS(r.tcv):'–')+'</b><span>Total contract value</span></div><div><b class="num">'+(r.ok?usdS(licAlloc):'–')+'</b><span>License revenue</span></div><div><b class="num">'+(r.ok?usdS(supAlloc):'–')+'</b><span>Support revenue</span></div><div><b class="num">'+(r.ok?r.termMonths.toFixed(2):'–')+'</b><span>Term in months</span></div></div>';
+    h+=allocTable(r);
+    if(S.ui.calc)h+=calcHtml(r);
+  }
+  return h;
+}
+function flagPill(c){return flagCount(c)?'<span class="pill warn">Further write-up needed: '+flagCount(c)+' flagged</span>':'<span class="pill">No flags</span>'}
+function usageHint(c){var us=c.usage||{},pk=us.sku?pickSsp(S.ssp,us.sku,c.start):null;if(!pk)return '';var h=pk.early?'No SSP version was effective at the start date, so the earliest is used.':(pk.row.effective?'Using the SSP effective '+esc(pk.row.effective)+'.':'Using the original SSP.');if(pk.row.unit)h+=' Priced per '+esc(pk.row.unit.toLowerCase().replace(/s$/,''))+'.';return h}
+function refresh(){
+  var res=results(),c=cur(),l=document.getElementById('list');
+  if(l)l.innerHTML=listHtml(res);
+  if(S.ui.tab!=='contracts'||!c)return;
+  var top=document.getElementById('etop');if(top)top.innerHTML=editorTop(res,c);
+  var r=res.filter(function(x){return x.uid===c.uid})[0],hs={license:sspHint(r,'license'),support:sspHint(r,'support'),usage:usageHint(c)};
+  Object.keys(hs).forEach(function(k){var el=document.querySelector('[data-hint="'+k+'"]');if(el)el.innerHTML=hs[k]});
+  var fp=document.getElementById('flagpill');if(fp)fp.innerHTML=flagPill(c);
+  var nm=document.getElementById('ename');if(nm)nm.textContent=c.customer||'New contract';
+  var ph=document.getElementById('f-label');if(ph)ph.placeholder=contractLabel(Object.assign({},c,{label:''}));
+}
+function editorHtml(res){
+  var c=cur();
+  if(!c)return '<div class="empty">Select a contract, or choose Add contract to enter one.</div>';
+  var r=res.filter(function(x){return x.uid===c.uid})[0];
+  var usage=c.mode==='usage';
+  var sspL=uniqSkus('License'),sspS=uniqSkus('Support');
+  var pkl=pickSsp(S.ssp,c.license.sku,c.start),lic=pkl&&pkl.row;
+  var isGB=lic&&/GB/i.test(lic.unit||'');
+  var h='<div class="editor"><div class="ehead"><h2 id="ename">'+esc(c.customer||'New contract')+'</h2><div class="acts"><label class="switch"><input type="checkbox" id="calcToggle" data-act="calc"'+(S.ui.calc?' checked':'')+'> Show calculation</label>'+
+   '<button class="ghost" data-act="dup">Duplicate</button>'+
+   (S.ui.confirm===c.uid?'<button class="danger" data-act="delok">Confirm delete</button><button class="ghost" data-act="delcancel">Cancel</button>':'<button class="danger" data-act="del">Delete</button>')+'</div></div>';
+  h+='<div id="etop">'+editorTop(res,c)+'</div>';
+  h+='<div class="form"><div class="sec"><h3>Customer and contract</h3><div class="grid">'+
+    fld('Contract type','mode',c.mode||'license',{options:[['license','License and support'],['usage','Usage-based (consumption)']]})+
+    fld('Customer name','customer',c.customer)+fld('Buyer ID','buyerId',c.buyerId)+fld('Contract ID','label',c.label,{ph:contractLabel(Object.assign({},c,{label:''})),hint:'Leave blank to name it from the customer and start date.'})+fld('Currency','currency',c.currency)+
+    fld('Effective date','effective',c.effective,{type:'date'})+fld('Start date','start',c.start,{type:'date'})+fld('End date','end',c.end,{type:'date'})+
+    (usage?'':fld('Total contract value','tcv',c.tcv,{type:'number'}))+
+    fld('Notes','notes',c.notes)+'</div></div>';
+  if(usage){
+    h+=usageForm(c,r);
+    h+='<div class="sec"><h3>Billing</h3><div class="grid">'+fld('Invoice ID','invoiceId',c.invoiceId)+fld('Commitment invoice date','invoiceDate',c.invoiceDate,{type:'date',hint:'Blank uses the effective date.'})+fld('Payment date','paymentDate',c.paymentDate,{type:'date'})+'</div></div>';
+  }else{
+  h+='<div class="sec"><h3>License</h3><div class="grid">'+
+    fld('License SKU','license.sku',c.license.sku,{options:sspL.map(function(x){return [x,x]}),hint:sspHint(r,'license'),hk:'license'})+
+    fld('Quantity','license.qty',c.license.qty,{type:'number'})+fld('Unit of measure','license.uom',c.license.uom,{options:uomOptions(c.license.uom)})+
+    (isGB?fld('Data size (GB)','license.gb',c.license.gb,{type:'number'}):'')+
+    fld('Price used for the SSP test','license.listPrice',c.license.listPrice,{type:'number',hint:'The license price before fees. It is divided by units to get the contract price per unit.'})+
+    fld('Units override','license.unitsOverride',c.license.unitsOverride,{type:'number',hint:'Optional. Replaces the units the tool works out.'})+'</div></div>';
+  h+='<div class="sec"><h3>Support</h3><div class="grid">'+
+    fld('Support SKU','support.sku',c.support.sku,{options:[['','No support']].concat(sspS.map(function(x){return [x,x]})),hint:sspHint(r,'support'),hk:'support'})+
+    fld('Recognize from (month)','recogFrom',c.recogFrom,{type:'month',hint:'Use when the contract took effect after the service began. Revenue earned earlier is caught up in this month.'})+'</div></div>';
+  h+='<div class="sec"><h3>Billing</h3><div class="grid">'+
+    fld('Invoice ID','invoiceId',c.invoiceId)+fld('Invoice date','invoiceDate',c.invoiceDate,{type:'date'})+fld('Payment date','paymentDate',c.paymentDate,{type:'date'})+
+    fld('Invoiced amount','invoiced',c.invoiced,{type:'number',hint:'Blank means the total contract value, unless you add invoices below.'})+fld('Fees','fees',c.fees,{type:'number'})+'</div>'+invHtml(c)+'</div>';
+  }
+  h+='<div class="sec"><h3>Contract review</h3><p class="muted sm" style="margin:0">These answers flag a contract for write-up. They do not change the numbers.</p><div class="flags">'+
+    FLAGQ.map(function(q,i){return '<label class="flag"><span>'+esc(q)+'</span><select id="f-flags-'+i+'" data-p="flags.'+i+'"><option value=""'+(!c.flags[i]?' selected':'')+'></option><option'+(c.flags[i]==='Yes'?' selected':'')+'>Yes</option><option'+(c.flags[i]==='No'?' selected':'')+'>No</option></select></label>'}).join('')+'</div>'+
+    '<div id="flagpill">'+flagPill(c)+'</div></div></div></div>';
+  return h;
+}
+function contractsView(res){
+  return '<div class="split"><div class="side"><div class="side-tools"><input id="q" type="text" placeholder="Search customers" value="'+esc(S.ui.q)+'" aria-label="Search contracts"><button class="primary" data-act="add">Add contract</button></div><div id="list">'+listHtml(res)+'</div></div>'+editorHtml(res)+'</div>';
+}
+/* ----- report ----- */
+function niceScale(min,max,n){
+  var span=Math.max(max-min,1e-9),raw=span/n,mag=Math.pow(10,Math.floor(Math.log10(raw))),nm=raw/mag;
+  var step=(nm<=1?1:nm<=2?2:nm<=2.5?2.5:nm<=5?5:10)*mag;
+  return{min:Math.floor(min/step)*step,max:Math.ceil(max/step)*step,step:step};
+}
+function legendHtml(series){
+  var has={License:0,Support:0,Usage:0};series.forEach(function(s){has.License+=s.License;has.Support+=s.Support;has.Usage+=s.Usage});
+  return '<div class="legend">'+[['License','license'],['Support','support'],['Usage','usage']].filter(function(x){return has[x[0]]>0}).map(function(x){return '<span><i style="background:var(--'+x[1]+')"></i>'+x[0]+'</span>'}).join('')+'</div>';
+}
+function chartRevenue(periods,series,selKey){
+  var W=640,H=250,m={l:56,r:12,t:12,b:34},pw=W-m.l-m.r,ph=H-m.t-m.b,n=periods.length;
+  var tot=series.map(function(s){return s.License+s.Support+s.Usage});
+  var sc=niceScale(0,Math.max.apply(null,tot.concat([1])),4);
+  var y=function(v){return m.t+ph-(v-sc.min)/(sc.max-sc.min)*ph};
+  var bw=pw/n,w=Math.min(bw*.62,46);
+  var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Revenue recognized by period, split by revenue stream">';
+  for(var t=sc.min;t<=sc.max+1e-6;t+=sc.step){s+='<line class="grid" x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+y(t)+'" y2="'+y(t)+'"/><text x="'+(m.l-8)+'" y="'+(y(t)+4)+'" font-size="11" text-anchor="end">'+cmp(t)+'</text>'}
+  var every=Math.ceil(n/10);
+  periods.forEach(function(p,i){
+    var cx=m.l+bw*(i+.5),sel=p.key===selKey;
+    if(sel)s+='<rect x="'+(m.l+bw*i)+'" y="'+m.t+'" width="'+bw+'" height="'+ph+'" fill="var(--soft)"/>';
+    var run=0,parts=[['License','license'],['Support','support'],['Usage','usage']];
+    parts.forEach(function(pt){
+      var v=series[i][pt[0]];if(!(v>0))return;
+      var y1=y(run+v),y0=y(run);
+      s+='<rect x="'+(cx-w/2)+'" y="'+y1+'" width="'+w+'" height="'+(y0-y1)+'" fill="var(--'+pt[1]+')" stroke="var(--surface)" stroke-width="1.5"/>';
+      run+=v;
+    });
+    if(i%every===0||sel)s+='<text x="'+cx+'" y="'+(H-12)+'" font-size="11" text-anchor="middle"'+(sel?' style="font-weight:700;fill:var(--ink)"':'')+'>'+esc(p.label)+'</text>';
+    var tip=p.label+parts.filter(function(pt){return series[i][pt[0]]>0}).map(function(pt){return '\n'+pt[0]+'  '+usdS(series[i][pt[0]])}).join('')+'\nTotal  '+usdS(tot[i]);
+    s+='<rect class="hit" tabindex="0" role="button" x="'+(m.l+bw*i)+'" y="'+m.t+'" width="'+bw+'" height="'+ph+'" data-act="period" data-key="'+p.key+'" data-tip="'+esc(tip)+'" aria-label="'+esc(p.label+': total '+usdS(tot[i])+'. Select to bridge this period.')+'"/>';
+  });
+  s+='<line class="axis" x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+y(0)+'" y2="'+y(0)+'"/></svg>';
+  return s;
+}
+function chartBridge(b,label){
+  var W=520,H=250,m={l:12,r:12,t:26,b:40};
+  var bars=[{name:'Opening',from:0,to:b.open,color:'var(--total)',kind:'total'},{name:'Billings',from:b.open,to:b.open+b.billings,color:'var(--bill)',kind:'up'}];
+  var run=b.open+b.billings;
+  [['License','license',b.license],['Support','support',b.support],['Usage','usage',b.usage]].forEach(function(x){
+    if(!b.present[x[0]])return;
+    bars.push({name:x[0]+' revenue',from:run,to:run-x[2],color:'var(--'+x[1]+')',kind:'down'});run-=x[2];
+  });
+  bars.push({name:'Closing',from:0,to:b.close,color:'var(--total)',kind:'total'});
+  var vals=[0];bars.forEach(function(x){vals.push(x.from,x.to)});
+  var lo=Math.min.apply(null,vals),hi=Math.max.apply(null,vals);
+  if(hi-lo<1){hi=lo+1}
+  var pad=(hi-lo)*0.06,sc=niceScale(lo-(lo<0?pad:0),hi+pad,4);
+  var ph=H-m.t-m.b,pw=W-m.l-m.r,bw=pw/bars.length,w=Math.min(bw*.62,60);
+  var y=function(v){return m.t+ph-(v-sc.min)/(sc.max-sc.min)*ph};
+  var s='<svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Contract liability bridge for '+esc(label)+'">';
+  s+='<line class="grid" x1="'+m.l+'" x2="'+(W-m.r)+'" y1="'+y(0)+'" y2="'+y(0)+'"/>';
+  bars.forEach(function(x,i){
+    var cx=m.l+bw*(i+.5),top=Math.min(y(x.from),y(x.to)),h=Math.max(Math.abs(y(x.from)-y(x.to)),1);
+    var delta=x.kind==='total'?x.to:(x.to-x.from);
+    var tip=x.name+'\n'+(delta<0?'-':'')+usdS(Math.abs(delta));
+    s+='<rect x="'+(cx-w/2)+'" y="'+top+'" width="'+w+'" height="'+h+'" fill="'+x.color+'" stroke="var(--surface)" stroke-width="1.5" data-tip="'+esc(tip)+'"/>';
+    var val=x.kind==='total'?cmp(x.to):(x.kind==='up'?'+'+cmp(x.to-x.from):'-'+cmp(Math.abs(x.to-x.from)));
+    var down=(x.to<x.from)||(x.kind==='total'&&x.to<0);
+    s+='<text x="'+cx+'" y="'+(down?top+h+13:top-6)+'" font-size="12" font-weight="600" text-anchor="middle" style="fill:var(--ink)">'+val+'</text>';
+    var words=x.name.split(' ');
+    s+='<text x="'+cx+'" y="'+(H-20)+'" font-size="11.5" text-anchor="middle">'+esc(words[0])+'</text>'+(words[1]?'<text x="'+cx+'" y="'+(H-6)+'" font-size="11.5" text-anchor="middle">'+esc(words[1])+'</text>':'');
+    if(i<bars.length-1)s+='<line x1="'+(cx+w/2)+'" x2="'+(m.l+bw*(i+1.5)-w/2)+'" y1="'+y(x.to)+'" y2="'+y(x.to)+'" stroke="var(--muted)" stroke-dasharray="3 3"/>';
+  });
+  return s+'</svg>';
+}
+function defaultRange(flat,gran){
+  var lo=Infinity,hi=-Infinity;
+  flat.rows.forEach(function(x){x.map.forEach(function(v,i){if(i<lo)lo=i;if(i>hi)hi=i})});
+  if(!isFinite(lo)){var d=new Date();lo=ymi(d.getFullYear(),d.getMonth()+1);hi=lo+11}
+  var cut=/^(\d{4})-(\d{2})$/.exec(S.settings.cutover||'');
+  var from=cut?ymi(+cut[1],+cut[2]):lo;
+  if(from>hi)from=lo;
+  var cap=gran==='month'?35:gran==='quarter'?39:119;
+  return{from:from,to:Math.min(hi,from+cap)};
+}
+function idxOfMonth(s){var m=/^(\d{4})-(\d{2})$/.exec(s||'');return m?ymi(+m[1],+m[2]):null}
+function monStr(i){var q=fromYmi(i);return q.y+'-'+String(q.m).padStart(2,'0')}
+function reportView(res){
+  var R=S.ui.rep,flat=flatten(res);
+  if(!flat.rows.length)return '<div class="empty">No contracts are complete yet. Enter dates, a total value and a license SKU on the Contracts tab, then come back.</div>';
+  var dr=defaultRange(flat,R.gran);
+  var from=idxOfMonth(R.from);if(from==null)from=dr.from;
+  var to=idxOfMonth(R.to);if(to==null)to=dr.to;
+  if(to<from)to=from;
+  var fy=+S.settings.fyStart||1;
+  var periods=makePeriods(from,to,R.gran,fy);
+  var d=R.drill,mx=buildMatrix(flat,periods,d),series=streamSeries(flat,periods,d);
+  var selKey=R.period,sel=periods.filter(function(p){return p.key===selKey})[0];
+  if(!sel){sel=periods.filter(function(p,i){return series[i].License+series[i].Support>0})[0]||periods[0]}
+  var level=mx.level;
+  /* breadcrumbs */
+  var cr=[],lab={};
+  cr.push(level===0?'<span class="cur">All customers</span>':'<button data-act="crumb" data-v="0">All customers</button>');
+  if(d.customer!=null)cr.push(level===1?'<span class="cur">'+esc(d.customer)+'</span>':'<button data-act="crumb" data-v="1">'+esc(d.customer)+'</button>');
+  if(d.uid!=null){var rr=res.filter(function(x){return x.uid===d.uid})[0];cr.push(level===2?'<span class="cur">'+esc(rr?rr.label:'Contract')+'</span>':'<button data-act="crumb" data-v="2">'+esc(rr?rr.label:'Contract')+'</button>')}
+  if(d.key!=null){var ln0=flat.rows.filter(function(x){return x.uid===d.uid&&x.key===d.key})[0];cr.push('<span class="cur">'+esc(ln0?ln0.lineLabel:'Line')+'</span>')}
+  var h='<div class="ctl"><label class="fld"><span>Group by</span><select id="r-gran" data-rep="gran"><option value="month"'+(R.gran==='month'?' selected':'')+'>Month</option><option value="quarter"'+(R.gran==='quarter'?' selected':'')+'>Fiscal quarter</option><option value="fy"'+(R.gran==='fy'?' selected':'')+'>Fiscal year</option></select></label>'+
+   '<label class="fld"><span>From</span><input id="r-from" type="month" data-rep="from" value="'+monStr(from)+'"></label><label class="fld"><span>To</span><input id="r-to" type="month" data-rep="to" value="'+monStr(to)+'"></label>'+
+   '<button class="ghost" data-act="rrange">Reset range</button></div>';
+  h+='<nav class="crumbs" aria-label="Drill-down path">'+cr.join('<i>›</i>')+'</nav>';
+  var showBridge=level<3;
+  h+='<div class="charts"><div class="chartbox"><h3>Revenue by period</h3><p class="muted sm">Select a bar to see that period bridged on the right.</p>'+legendHtml(series)+'<div class="cscroll">'+chartRevenue(periods,series,sel.key)+'</div></div>';
+  if(showBridge){
+    var b=bridge(flat,sel,d);
+    h+='<div class="chartbox"><h3>Deferred revenue bridge, '+esc(sel.label)+'</h3><p class="muted sm">Opening + billings − revenue = closing. Billings come from the invoices entered on each contract. A negative balance means revenue is ahead of billing.</p><div class="cscroll b">'+chartBridge(b,sel.label)+'</div></div>';
+  }else{
+    h+='<div class="chartbox"><h3>Bridge</h3><p class="muted sm">Billing is tracked for the whole contract, so the bridge is shown down to the contract level. Go back one step to see it.</p></div>';
+  }
+  h+='</div>';
+  var showPrior=Math.abs(mx.totals[0])>0.5,showLater=Math.abs(mx.totals[mx.totals.length-2])>0.5;
+  var head='<th>'+(level===0?'Customer':level===1?'Contract':'Line')+'</th>'+(showPrior?'<th>Before '+esc(periods[0].label)+'</th>':'')+periods.map(function(p){return '<th'+(p.key===sel.key?' class="sel"':'')+'><button class="thbtn" data-act="period" data-key="'+p.key+'">'+esc(p.label)+'</button></th>'}).join('')+(showLater?'<th>After '+esc(periods[periods.length-1].label)+'</th>':'')+'<th>Total</th>';
+  function cells(v){
+    var o=(showPrior?'<td>'+usd(v[0])+'</td>':'');
+    periods.forEach(function(p,i){o+='<td'+(p.key===sel.key?' class="sel"':'')+'>'+usd(v[i+1])+'</td>'});
+    if(showLater)o+='<td>'+usd(v[v.length-2])+'</td>';
+    return o+'<td><b>'+usd(v[v.length-1])+'</b></td>';
+  }
+  var body=mx.rows.map(function(r){
+    var first;
+    if(level===0)first='<button class="rowbtn" data-act="drill" data-k="'+esc(r.key)+'">'+esc(r.label)+'</button>';
+    else if(level===1)first='<button class="rowbtn" data-act="drill" data-k="'+esc(r.key)+'">'+esc(r.label)+'</button>';
+    else if(level===2)first='<button class="rowbtn" data-act="drill" data-k="'+esc(r.key)+'">'+esc(r.label)+'</button> <span class="muted sm">'+esc(r.sub)+'</span>';
+    else first=esc(r.label)+' <span class="muted sm">'+esc(r.sub)+'</span>';
+    return '<tr><td>'+first+'</td>'+cells(r.vals)+'</tr>';
+  }).join('');
+  h+='<h3 style="margin-bottom:8px">Revenue waterfall (USD)</h3><div class="tablewrap mx"><table><thead><tr>'+head+'</tr></thead><tbody>'+body+'</tbody><tfoot><tr><td>Total</td>'+cells(mx.totals)+'</tr></tfoot></table></div>';
+  if(level>=2){var uidc=d.uid;h+='<p style="margin-top:12px"><button class="ghost" data-act="open" data-uid="'+esc(uidc)+'">Open this contract and show the calculation</button></p>'}
+  else h+='<p class="muted sm" style="margin-top:10px">Select a name to drill down: customer, then contract, then line.</p>';
+  return h;
+}
+/* ----- settings ----- */
+function settingsView(){
+  var st=S.settings,ms=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var rows=S.ssp.map(function(x,i){
+    function inp(f,t,w){return '<td><input id="s-'+i+'-'+f+'" data-ssp="'+i+'.'+f+'" type="'+(t||'text')+'"'+(t==='number'?' step="any" data-num="1"':'')+' value="'+esc(x[f])+'" style="min-width:'+(w||90)+'px" aria-label="'+f+' for row '+(i+1)+'"></td>'}
+    return '<tr>'+inp('sku','text',190)+inp('effective','date',140)+'<td><select id="s-'+i+'-stream" data-ssp="'+i+'.stream" aria-label="Stream for row '+(i+1)+'"><option'+(x.stream==='License'?' selected':'')+'>License</option><option'+(x.stream==='Support'?' selected':'')+'>Support</option><option'+(x.stream==='Usage'?' selected':'')+'>Usage</option></select></td>'+inp('unit','text',170)+inp('ssp','number',80)+inp('low','number',90)+inp('high','number',90)+inp('med','number',90)+'<td><select id="s-'+i+'-pattern" data-ssp="'+i+'.pattern" aria-label="Pattern for row '+(i+1)+'"><option'+(x.pattern==='As Delivered'?' selected':'')+'>As Delivered</option><option'+(x.pattern==='Ratable'?' selected':'')+'>Ratable</option></select></td>'+inp('gl','text',190)+'<td style="white-space:nowrap"><button class="ghost" data-act="sspver" data-i="'+i+'">New version</button> <button class="ghost" data-act="sspdel" data-i="'+i+'">Remove</button></td></tr>';
+  }).join('');
+  return '<div class="panel"><div class="sec"><h2>Calendar</h2><div class="grid" style="max-width:560px"><label class="fld"><span>Fiscal year starts in</span><select id="set-fy" data-set="fyStart">'+ms.map(function(m,i){return '<option value="'+(i+1)+'"'+((+st.fyStart)===i+1?' selected':'')+'>'+m+'</option>'}).join('')+'</select><small>The fiscal year is named for the year it ends. A March start makes March 2023 the first month of FY24.</small></label>'+
+  '<label class="fld"><span>Cut-over month</span><input id="set-cut" type="month" data-set="cutover" value="'+esc(st.cutover)+'"><small>Optional. The report starts here, so earlier revenue appears in a Before column.</small></label></div></div>'+
+  '<div class="sec"><h2>Standalone selling prices</h2><p class="muted sm" style="margin:0">This is the price bank, the same table as the SSP tab. Each contract uses the version of its SKU with the latest effective date on or before the contract start date. A blank date means the version applies from the beginning. To change prices, choose New version on a row and set its effective date, so older contracts keep the prices they were signed under. When a license has no fixed SSP, the contract price per unit is used if it falls inside the low to high range, and the median is used if not. Support rows hold the support rate as a decimal, such as 0.35. Usage rows hold the list price per unit, such as 1.00 per credit.</p><div class="tablewrap"><table><thead><tr><th>SKU</th><th>Effective from</th><th>Stream</th><th>Unit</th><th>Fixed SSP or rate</th><th>Low</th><th>High</th><th>Median</th><th>Pattern</th><th>GL account</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div><div><button class="ghost" data-act="sspadd">Add SKU</button></div></div>'+
+  '<div class="sec"><h2>Data</h2><p class="muted sm" style="margin:0">Contracts are saved in this browser only. Use Copy or Download to keep a backup or move them to another browser.</p><div class="row"><button class="primary" data-act="copy">Copy data</button><button class="ghost" data-act="download">Download file</button><label class="ghost" style="cursor:pointer">Load file<input id="file" type="file" accept=".json,application/json" style="display:none"></label></div>'+
+  '<label class="fld"><span>Or paste data to load</span><textarea id="paste" placeholder="Paste exported data here">'+esc(S.ui.import)+'</textarea></label><div class="row"><button class="ghost" data-act="loadpaste">Load pasted data</button><button class="ghost" data-act="demo">Load example contracts</button>'+(S.ui.confirm==='clear'?'<button class="danger" data-act="clearok">Confirm: remove all contracts</button><button class="ghost" data-act="delcancel">Cancel</button>':'<button class="danger" data-act="clear">Remove all contracts</button>')+'</div><div class="status'+(S.ui.err?' err':'')+'" role="status">'+esc(S.ui.msg)+'</div></div></div>';
+}
+function render(){
+  var a=document.activeElement,aid=a&&a.id,ss=null,se=null;
+  try{if(a&&a.selectionStart!=null){ss=a.selectionStart;se=a.selectionEnd}}catch(e){}
+  var res=results(),v;
+  if(S.ui.tab==='contracts')v=contractsView(res);else if(S.ui.tab==='report')v=reportView(res);else v=settingsView();
+  $('#app').innerHTML=header()+'<main>'+v+'</main>';
+  if(aid){var el=document.getElementById(aid);if(el&&el!==document.activeElement){el.focus({preventScroll:true});try{if(ss!=null)el.setSelectionRange(ss,se)}catch(e){}}}
+}
+function say(m,err){S.ui.msg=m;S.ui.err=!!err}
+function exportJson(){return JSON.stringify({version:1,settings:S.settings,ssp:S.ssp,contracts:S.contracts},null,1)}
+function importData(txt){
+  var d;try{d=JSON.parse(txt)}catch(e){say('That is not valid data. Paste the full text from Copy data, or choose the file you downloaded.',true);return}
+  if(!d||!Array.isArray(d.contracts)){say('No contracts found in that data.',true);return}
+  S.contracts=d.contracts.map(function(c){c.uid=c.uid||uid();c.license=c.license||{};c.support=c.support||{sku:''};c.invoices=c.invoices||[];c.flags=(c.flags||[]).concat(['','','','','','','','','','','','']).slice(0,12);return c});
+  if(Array.isArray(d.ssp)&&d.ssp.length)S.ssp=d.ssp;
+  if(d.settings)S.settings=Object.assign({fyStart:1,cutover:'',currency:'USD'},d.settings);
+  S.demoLoaded=false;S.ui.sel=S.contracts.length?S.contracts[0].uid:null;S.ui.rep={gran:'quarter',from:'',to:'',drill:{},period:null};S.ui.import='';
+  say('Loaded '+S.contracts.length+' contracts.');save();
+}
+function setPath(o,p,v){var k=p.split('.');for(var i=0;i<k.length-1;i++)o=o[k[i]];o[k[k.length-1]]=v}
+/* ---------- events ---------- */
+document.addEventListener('click',function(e){
+  var t=e.target.closest('[data-act]');if(!t)return;
+  var act=t.dataset.act,R=S.ui.rep;
+  if(act==='calc')return;
+  if(act==='tab'){S.ui.tab=t.dataset.v;S.ui.confirm='';render();window.scrollTo(0,0);return}
+  if(act==='theme'){var r=document.documentElement,dark=r.dataset.theme?r.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches;r.dataset.theme=dark?'light':'dark';return}
+  if(act==='select'){S.ui.sel=t.dataset.uid;S.ui.confirm='';render();if(window.innerWidth<=900){var ed=document.querySelector('.editor');if(ed)ed.scrollIntoView({behavior:'smooth',block:'start'})}return}
+  if(act==='add'){var c=blank();S.contracts.unshift(c);S.ui.sel=c.uid;S.ui.q='';save();render();var f=document.getElementById('f-customer');if(f)f.focus();return}
+  if(act==='dup'){var c0=cur();if(c0){var c1=JSON.parse(JSON.stringify(c0));c1.uid=uid();c1.label=c0.label?c0.label+' (copy)':'';c1.customer=c0.customer;S.contracts.splice(S.contracts.indexOf(c0)+1,0,c1);S.ui.sel=c1.uid;save();render()}return}
+  if(act==='del'){S.ui.confirm=S.ui.sel;render();return}
+  if(act==='delcancel'){S.ui.confirm='';render();return}
+  if(act==='delok'){var i=S.contracts.findIndex(function(x){return x.uid===S.ui.sel});if(i>-1)S.contracts.splice(i,1);S.ui.sel=S.contracts.length?S.contracts[Math.min(i,S.contracts.length-1)].uid:null;S.ui.confirm='';save();render();return}
+  if(act==='period'){R.period=t.dataset.key;render();return}
+  if(act==='drill'){var k=t.dataset.k,lv=R.drill.key!=null?3:R.drill.uid!=null?2:R.drill.customer!=null?1:0;
+    if(lv===0)R.drill={customer:k};else if(lv===1)R.drill={customer:R.drill.customer,uid:k};else if(lv===2)R.drill={customer:R.drill.customer,uid:R.drill.uid,key:k};
+    render();return}
+  if(act==='crumb'){var n=+t.dataset.v,d0=R.drill;R.drill=n===0?{}:n===1?{customer:d0.customer}:{customer:d0.customer,uid:d0.uid};render();return}
+  if(act==='rrange'){R.from='';R.to='';R.period=null;render();return}
+  if(act==='open'){S.ui.sel=t.dataset.uid;S.ui.calc=true;S.ui.tab='contracts';render();window.scrollTo(0,0);return}
+  if(act==='invadd'){var ci=cur();if(ci){ci.invoices=ci.invoices||[];ci.invoices.push({date:'',amount:''});save();render()}return}
+  if(act==='invdel'){var cj=cur();if(cj){cj.invoices.splice(+t.dataset.i,1);save();render()}return}
+  if(act==='sspver'){var src=S.ssp[+t.dataset.i];var cp=Object.assign({},src);cp.effective=new Date().toISOString().slice(0,10);S.ssp.splice(+t.dataset.i+1,0,cp);save();render();return}
+  if(act==='monadd'){var cm=cur();if(cm){ensureUsage(cm);var last=cm.usage.months.length?cm.usage.months[cm.usage.months.length-1].ym:'';cm.usage.months.push({ym:last&&/^\d{4}-\d{2}$/.test(last)?ymAdd(last,1):'',units:'',status:'Actual'});save();render()}return}
+  if(act==='mondel'){var cd=cur();if(cd){cd.usage.months.splice(+t.dataset.i,1);save();render()}return}
+  if(act==='monfill'){var cf=cur();if(cf){ensureUsage(cf);var have={};cf.usage.months.forEach(function(m){have[m.ym]=1});var tl=termList(cf);if(!tl.length){say('Enter the start and end dates first.',true)}else{tl.forEach(function(ym){if(!have[ym])cf.usage.months.push({ym:ym,units:'',status:'Actual'})});sortMonths(cf);save()}render()}return}
+  if(act==='monfc'){var cg=cur();if(cg){ensureUsage(cg);sortMonths(cg);var ms=cg.usage.months,li=-1;ms.forEach(function(m,i){if(m.status!=='Forecast'&&m.units!==''&&!isNaN(+m.units))li=i});if(li<0){say('Enter units for at least one actual month first.',true)}else{var gr=(+cg.usage.growth||0)/100,prev=+ms[li].units;for(var k=li+1;k<ms.length;k++){prev=prev*(1+gr);ms[k].units=Math.round(prev);ms[k].status='Forecast'}save()}render()}return}
+  if(act==='sspadd'){S.ssp.push({sku:'New SKU',effective:'',stream:'License',unit:'Price per year',ssp:0,low:0,high:0,med:0,pattern:'As Delivered',gl:''});save();render();return}
+  if(act==='sspdel'){S.ssp.splice(+t.dataset.i,1);save();render();return}
+  if(act==='copy'){var txt=exportJson();var ok=function(){say('Copied. Paste it into a file to keep a backup.');render()};var fail=function(){var ta=document.getElementById('paste');S.ui.import=txt;say('Copy was blocked here. The data is in the box below. Select it and copy.',true);render();var ta2=document.getElementById('paste');if(ta2){ta2.focus();ta2.select()}};
+    try{navigator.clipboard.writeText(txt).then(ok,fail)}catch(err){fail()}return}
+  if(act==='download'){try{var bl=new Blob([exportJson()],{type:'application/json'}),u=URL.createObjectURL(bl),a=document.createElement('a');a.href=u;a.download='rev-rec-ledger.json';document.body.appendChild(a);a.click();a.remove();say('If a file did not download, use Copy data instead.')}catch(err){say('Download is not available here. Use Copy data instead.',true)}render();return}
+  if(act==='loadpaste'){var ta=document.getElementById('paste');importData(ta?ta.value:'');render();return}
+  if(act==='demo'){S.contracts=demo();S.ssp=SSP0.map(function(x){return Object.assign({},x)});S.settings={fyStart:1,cutover:'',currency:'USD'};S.ui.sel=S.contracts[0].uid;S.ui.rep={gran:'quarter',from:'',to:'',drill:{},period:null};say('Loaded 6 example contracts.');save();render();return}
+  if(act==='clear'){S.ui.confirm='clear';render();return}
+  if(act==='clearok'){S.contracts=[];S.ui.sel=null;S.ui.confirm='';say('All contracts removed.');save();render();return}
+});
+var STRUCT={'mode':1,'license.sku':1,'support.sku':1,'usage.sku':1,'usage.tierOn':1,'usage.tierType':1,'usage.expire':1};
+document.addEventListener('change',function(e){
+  var t=e.target;
+  if(t.id==='calcToggle'){S.ui.calc=t.checked;render();return}
+  if(t.id==='file'){var f=t.files&&t.files[0];if(!f)return;var rd=new FileReader();rd.onload=function(){importData(String(rd.result));render()};rd.readAsText(f);return}
+  if(t.dataset.p!=null){var c=cur();if(!c)return;var v=t.dataset.num?(t.value===''?'':Number(t.value)):t.value;setPath(c,t.dataset.p,v);if(t.dataset.p==='mode'&&v==='usage')ensureUsage(c);save();if(STRUCT[t.dataset.p])render();else refresh();return}
+  if(t.dataset.ssp!=null){var pr=t.dataset.ssp.split('.'),row=S.ssp[+pr[0]];row[pr[1]]=t.dataset.num?(t.value===''?0:Number(t.value)):t.value;save();return}
+  if(t.dataset.set!=null){S.settings[t.dataset.set]=t.dataset.set==='fyStart'?+t.value:t.value;S.ui.rep.from='';S.ui.rep.to='';S.ui.rep.period=null;save();return}
+  if(t.dataset.rep!=null){S.ui.rep[t.dataset.rep]=t.value;if(t.dataset.rep==='gran'){S.ui.rep.period=null}render();return}
+});
+document.addEventListener('input',function(e){
+  var t=e.target;
+  if(t.id==='q'){S.ui.q=t.value;var l=document.getElementById('list');if(l)l.innerHTML=listHtml(results())}
+  if(t.id==='paste')S.ui.import=t.value;
+});
+/* tooltip */
+var tip=document.getElementById('tip');
+function showTip(e){var t=e.target.closest('[data-tip]');if(!t){tip.style.display='none';return}tip.textContent=t.getAttribute('data-tip');tip.style.display='block';var x=(e.clientX||0)+14,y=(e.clientY||0)+14;if(!e.clientX){var b=t.getBoundingClientRect();x=b.left+b.width/2;y=b.top}tip.style.left=Math.min(x,innerWidth-tip.offsetWidth-8)+'px';tip.style.top=Math.min(y,innerHeight-tip.offsetHeight-8)+'px'}
+document.addEventListener('mousemove',showTip);document.addEventListener('mouseleave',function(){tip.style.display='none'});
+document.addEventListener('focusin',function(e){if(e.target.closest&&e.target.closest('[data-tip]'))showTip(e)});
+document.addEventListener('focusout',function(){tip.style.display='none'});
+document.addEventListener('keydown',function(e){if((e.key==='Enter'||e.key===' ')&&e.target.classList&&e.target.classList.contains('hit')){e.preventDefault();S.ui.rep.period=e.target.dataset.key;render()}});
+render();
+})();
+</script>
